@@ -1,0 +1,129 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>BharatAds Publisher Dashboard</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: Arial; background: #f0f2f5; }
+        
+        .header { background: #ff6600; color: white; padding: 15px 30px; }
+        .header h1 { font-size: 24px; }
+        .header p { font-size: 12px; opacity: 0.8; }
+        
+        .cards { display: flex; gap: 15px; padding: 20px; flex-wrap: wrap; }
+        .card { background: white; padding: 20px; border-radius: 10px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1); flex: 1; min-width: 150px; text-align: center; }
+        .card h2 { font-size: 2em; color: #ff6600; }
+        .card p { color: #666; font-size: 14px; }
+        
+        .section { padding: 0 20px 20px; }
+        .section h3 { color: #333; margin-bottom: 10px; }
+        
+        table { width: 100%; border-collapse: collapse; background: white;
+                border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        th { background: #ff6600; color: white; padding: 12px; text-align: left; }
+        td { padding: 12px; border-bottom: 1px solid #eee; }
+        tr:hover { background: #fff8f5; }
+        
+        .badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .active { background: #e8f5e9; color: green; }
+        .fraud { background: #ffebee; color: red; }
+        
+        .refresh { text-align: center; padding: 10px; color: #999; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>🇮🇳 BharatAds Dashboard</h1>
+    <p>India ka Apna Ad Network</p>
+</div>
+
+<div class="cards" id="cards">
+    <div class="card"><h2 id="total_imp">...</h2><p>Total Impressions</p></div>
+    <div class="card"><h2 id="total_clicks">...</h2><p>Total Clicks</p></div>
+    <div class="card"><h2 id="total_earn">...</h2><p>Total Earnings (₹)</p></div>
+    <div class="card"><h2 id="total_ads">...</h2><p>Active Ads</p></div>
+</div>
+
+<div class="section">
+    <h3>📊 Ad Performance</h3>
+    <table>
+        <tr>
+            <th>Advertiser</th>
+            <th>Impressions</th>
+            <th>Clicks</th>
+            <th>CTR %</th>
+            <th>Status</th>
+        </tr>
+        <tbody id="stats_table"></tbody>
+    </table>
+</div>
+
+<br>
+
+<div class="section">
+    <h3>💰 Publisher Earnings</h3>
+    <table>
+        <tr>
+            <th>Publisher</th>
+            <th>Website</th>
+            <th>Earnings (₹)</th>
+        </tr>
+        <tbody id="earnings_table"></tbody>
+    </table>
+</div>
+
+<div class="refresh">Auto refresh har 10 second mein ⚡</div>
+
+<script>
+const API = "https://web-production-1bb4c.up.railway.app";
+
+async function loadDashboard() {
+    // Stats load karo
+    const stats = await fetch(API + "/stats").then(r => r.json());
+    
+    let total_imp = 0, total_clicks = 0;
+    let rows = "";
+    
+    stats.forEach(ad => {
+        total_imp += ad.impressions;
+        total_clicks += ad.clicks;
+        rows += `<tr>
+            <td><b>${ad.advertiser}</b></td>
+            <td>${ad.impressions}</td>
+            <td>${ad.clicks}</td>
+            <td>${ad.ctr}%</td>
+            <td><span class="badge active">✅ Active</span></td>
+        </tr>`;
+    });
+    
+    document.getElementById("stats_table").innerHTML = rows;
+    document.getElementById("total_imp").innerText = total_imp;
+    document.getElementById("total_clicks").innerText = total_clicks;
+    document.getElementById("total_ads").innerText = stats.length;
+    
+    // Publisher earnings load karo
+    let earn_rows = "";
+    let total_earn = 0;
+    
+    for (let i = 1; i <= 2; i++) {
+        const p = await fetch(API + "/publisher/" + i + "/earnings").then(r => r.json());
+        total_earn += p.total_earnings;
+        earn_rows += `<tr>
+            <td><b>${p.publisher}</b></td>
+            <td>${p.website}</td>
+            <td>₹${p.total_earnings}</td>
+        </tr>`;
+    }
+    
+    document.getElementById("earnings_table").innerHTML = earn_rows;
+    document.getElementById("total_earn").innerText = "₹" + total_earn.toFixed(4);
+}
+
+loadDashboard();
+setInterval(loadDashboard, 10000);
+</script>
+</body>
+</html>
