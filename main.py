@@ -123,3 +123,11 @@ def get_stats():
         })
     db.close()
     return JSONResponse(content=result)
+
+from fastapi.responses import HTMLResponse
+import pathlib
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard():
+    html = pathlib.Path("dashboard.html").read_text()
+    return html
