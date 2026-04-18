@@ -1,12 +1,17 @@
 
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy import create_engine, Column, Integer, String, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
+from pydantic import BaseModel
 import random
-from auth import *
+import pathlib
 
 app = FastAPI()
 
@@ -16,6 +21,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+SECRET_KEY = "bharatads-secret-2024"
+ALGORITHM = "HS256"
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 engine = create_engine("sqlite:///bharatads.db", connect_args={"check_same_thread": False})
 Base = declarative_base()
@@ -39,6 +49,14 @@ class Publisher(Base):
     website = Column(String)
     earnings = Column(Float, default=0.0)
 
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    username = Column(String, unique=True)
+    email = Column(String, unique=True)
+    password = Column(String)
+    role = Column(String)
+
 Base.metadata.create_all(engine)
 
 db = Session()
@@ -58,9 +76,54 @@ if db.query(Ad).count() == 0:
     db.commit()
 db.close()
 
+class SignupData(BaseModel):
+    username: str
+    email: str
+    password: str
+    role: str
+
 @app.get("/")
 def home():
-    return {"message": "BharatAds Server Live hai! 🇮🇳"}
+    return {"message": "BharatAds Server Live hai!"}
+
+@app.post("/signup")
+def signup(data: SignupData):
+    db = Session()
+    existing = db.query(User).filter(User.username == data.username).first()
+    if existing:
+        db.close()
+        raise HTTPException(status_code=400, detail="Username already exists!")
+    hashed = pwd_context.hash(data.password)
+    user = User(username=data.username, email=data.email, password=hashed, role=data.role)
+    db.add(user)
+    db.commit()
+    db.close()
+    return {"message": f"Welcome to BharatAds, {data.username}!"}
+
+@app.post("/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    db = Session()
+    user = db.query(User).filter(User.username == form_data.username).first()
+    db.close()
+    if not user or not pwd_context.verify(form_data.password, user.password):
+        raise HTTPException(status_code=400, detail="Wrong username ya password!")
+    token = jwt.encode(
+        {"sub": user.username, "role": user.role,
+         "exp": datetime.utcnow() + timedelta(hours=24)},
+        SECRET_KEY, algorithm=ALGORITHM
+    )
+    return {"access_token": token, "token_type": "bearer", "role": user.role}
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return {"username": payload.get("sub"), "role": payload.get("role")}
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token!")
+
+@app.get("/me")
+def get_me(user=Depends(get_current_user)):
+    return user
 
 @app.get("/get-ad")
 def get_ad(niche: str = "general", publisher_id: int = 1):
@@ -125,10 +188,10 @@ def get_stats():
     db.close()
     return JSONResponse(content=result)
 
-from fastapi.responses import HTMLResponse
-import pathlib
-
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
-    html = pathlib.Path("dashboard.html").read_text()
-    return html
+    try:
+        html = pathlib.Path("dashboard.html").read_text()
+        return html
+    except:
+        return "<h1>Dashboard loading...</h1>"
