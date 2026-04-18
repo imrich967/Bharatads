@@ -246,3 +246,54 @@ def payment_history(publisher_id: int):
     }
     db.close()
     return result
+
+from pydantic import BaseModel
+
+class PaymentRequest(BaseModel):
+    publisher_id: int
+    upi_id: str
+
+@app.post("/request-payment")
+def request_payment(data: PaymentRequest, user=Depends(get_current_user)):
+    db = Session()
+    publisher = db.query(Publisher).filter(Publisher.id == data.publisher_id).first()
+    
+    if not publisher:
+        db.close()
+        raise HTTPException(status_code=404, detail="Publisher nahi mila!")
+    
+    if publisher.earnings < 100:
+        db.close()
+        return {
+            "status": "error",
+            "message": f"Minimum ₹100 chahiye! Abhi ₹{publisher.earnings} hai!"
+        }
+    
+    amount = publisher.earnings
+    publisher.earnings = 0
+    db.commit()
+    db.close()
+    
+    return {
+        "status": "success",
+        "message": f"₹{amount} payment process ho raha hai!",
+        "upi_id": data.upi_id,
+        "amount": amount,
+        "publisher": publisher.name
+    }
+
+@app.get("/payment-history/{publisher_id}")
+def payment_history(publisher_id: int):
+    db = Session()
+    publisher = db.query(Publisher).filter(Publisher.id == publisher_id).first()
+    if not publisher:
+        db.close()
+        return {"error": "Publisher nahi mila!"}
+    result = {
+        "publisher": publisher.name,
+        "current_earnings": round(publisher.earnings, 4),
+        "minimum_payout": "₹100",
+        "upi_ready": publisher.earnings >= 100
+    }
+    db.close()
+    return result
